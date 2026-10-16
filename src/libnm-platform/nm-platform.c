@@ -94,10 +94,26 @@ _nmp_link_port_data_to_string(NMPortKind                    port_kind,
     case NM_PORT_KIND_BRIDGE:
         nm_strbuf_append(&sbuf,
                          &sbuf_len,
-                         "port bridge path_cost %u priority %u hairpin %s",
+                         "port bridge path_cost %u priority %u broadcast_flood %s fast_leave %s "
+                         "flood %s guard %s hairpin %s isolated %s learning %s locked %s "
+                         "multicast_flood %s multicast_to_unicast %s neigh_suppress %s "
+                         "neigh_vlan_suppress %s root_block %s vlan_tunnel %s",
                          port_data->bridge.path_cost,
                          port_data->bridge.priority,
-                         port_data->bridge.hairpin ? "true" : "false");
+                         port_data->bridge.broadcast_flood ? "true" : "false",
+                         port_data->bridge.fast_leave ? "true" : "false",
+                         port_data->bridge.flood ? "true" : "false",
+                         port_data->bridge.guard ? "true" : "false",
+                         port_data->bridge.hairpin ? "true" : "false",
+                         port_data->bridge.isolated ? "true" : "false",
+                         port_data->bridge.learning ? "true" : "false",
+                         port_data->bridge.locked ? "true" : "false",
+                         port_data->bridge.multicast_flood ? "true" : "false",
+                         port_data->bridge.multicast_to_unicast ? "true" : "false",
+                         port_data->bridge.neigh_suppress ? "true" : "false",
+                         port_data->bridge.neigh_vlan_suppress ? "true" : "false",
+                         port_data->bridge.root_block ? "true" : "false",
+                         port_data->bridge.vlan_tunnel ? "true" : "false");
         goto out;
     }
 
@@ -403,6 +419,18 @@ static const struct {
             .compile_time_default = (IFLA_MAX >= 54 /* IFLA_PERM_ADDRESS */),
             .name                 = "IFLA_PERM_ADDRESS",
             .desc                 = "IFLA_PERM_ADDRESS netlink attribute",
+        },
+    [NM_PLATFORM_KERNEL_SUPPORT_TYPE_IFLA_BRPORT_LOCKED] =
+        {
+            .compile_time_default = (IFLA_BRPORT_MAX >= 39 /* IFLA_BRPORT_LOCKED */),
+            .name                 = "IFLA_BRPORT_LOCKED",
+            .desc                 = "IFLA_BRPORT_LOCKED netlink attribute",
+        },
+    [NM_PLATFORM_KERNEL_SUPPORT_TYPE_IFLA_BRPORT_NEIGH_VLAN_SUPPRESS] =
+        {
+            .compile_time_default = (IFLA_BRPORT_MAX >= 43 /* IFLA_BRPORT_NEIGH_VLAN_SUPPRESS */),
+            .name                 = "IFLA_BRPORT_NEIGH_VLAN_SUPPRESS",
+            .desc                 = "IFLA_BRPORT_NEIGH_VLAN_SUPPRESS netlink attribute",
         },
 };
 
@@ -2304,10 +2332,27 @@ nm_platform_link_change(NMPlatform               *self,
                                        : "");
         } else if (bridge_port) {
             g_string_append_printf(str,
-                                   "bridge-port path_cost %u priority %u hairpin %s",
+                                   "bridge-port path_cost %u priority %u broadcast_flood %s "
+                                   "fast_leave %s flood %s guard %s hairpin %s isolated %s "
+                                   "learning %s locked %s multicast_flood %s "
+                                   "multicast_to_unicast %s neigh_suppress %s "
+                                   "neigh_vlan_suppress %s root_block %s vlan_tunnel %s",
                                    bridge_port->path_cost,
                                    bridge_port->priority,
-                                   bridge_port->hairpin ? "true" : "false");
+                                   bridge_port->broadcast_flood ? "true" : "false",
+                                   bridge_port->fast_leave ? "true" : "false",
+                                   bridge_port->flood ? "true" : "false",
+                                   bridge_port->guard ? "true" : "false",
+                                   bridge_port->hairpin ? "true" : "false",
+                                   bridge_port->isolated ? "true" : "false",
+                                   bridge_port->learning ? "true" : "false",
+                                   bridge_port->locked ? "true" : "false",
+                                   bridge_port->multicast_flood ? "true" : "false",
+                                   bridge_port->multicast_to_unicast ? "true" : "false",
+                                   bridge_port->neigh_suppress ? "true" : "false",
+                                   bridge_port->neigh_vlan_suppress ? "true" : "false",
+                                   bridge_port->root_block ? "true" : "false",
+                                   bridge_port->vlan_tunnel ? "true" : "false");
         }
 
         if (str->len > 0 && str->str[str->len - 1] == ' ')
@@ -8269,7 +8314,23 @@ nm_platform_link_bond_port_hash_update(const NMPlatformLinkBondPort *obj, NMHash
 void
 nm_platform_link_bridge_port_hash_update(const NMPlatformLinkBridgePort *obj, NMHashState *h)
 {
-    nm_hash_update_vals(h, obj->path_cost, obj->priority, obj->hairpin);
+    nm_hash_update_vals(h,
+                        obj->path_cost,
+                        obj->priority,
+                        obj->broadcast_flood,
+                        obj->fast_leave,
+                        obj->flood,
+                        obj->guard,
+                        obj->hairpin,
+                        obj->isolated,
+                        obj->learning,
+                        obj->locked,
+                        obj->multicast_flood,
+                        obj->multicast_to_unicast,
+                        obj->neigh_suppress,
+                        obj->neigh_vlan_suppress,
+                        obj->root_block,
+                        obj->vlan_tunnel);
 }
 
 int
@@ -8419,7 +8480,20 @@ nm_platform_link_bridge_port_cmp(const NMPlatformLinkBridgePort *a,
     NM_CMP_SELF(a, b);
     NM_CMP_FIELD(a, b, path_cost);
     NM_CMP_FIELD(a, b, priority);
+    NM_CMP_FIELD(a, b, broadcast_flood);
+    NM_CMP_FIELD(a, b, fast_leave);
+    NM_CMP_FIELD(a, b, flood);
+    NM_CMP_FIELD(a, b, guard);
     NM_CMP_FIELD(a, b, hairpin);
+    NM_CMP_FIELD(a, b, isolated);
+    NM_CMP_FIELD(a, b, learning);
+    NM_CMP_FIELD(a, b, locked);
+    NM_CMP_FIELD(a, b, multicast_flood);
+    NM_CMP_FIELD(a, b, multicast_to_unicast);
+    NM_CMP_FIELD(a, b, neigh_suppress);
+    NM_CMP_FIELD(a, b, neigh_vlan_suppress);
+    NM_CMP_FIELD(a, b, root_block);
+    NM_CMP_FIELD(a, b, vlan_tunnel);
 
     return 0;
 }
