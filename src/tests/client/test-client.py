@@ -2141,8 +2141,9 @@ class TestNmcli(unittest.TestCase):
             replace_stderr=[
                 Util.ReplaceTextRegex(
                     # depending on glib version, it prints `%s', '%s', or “%s”.
-                    # depending on libc version, it converts unicode to ? or *.
-                    r"Key/Value pair 0, [`*?']invalid[*?'], in address element [`*?']very:invalid[*?'] does not contain an equal sign",
+                    # depending on libc version, it converts unicode to ? or *,
+                    # or leaves it as is.
+                    r"Key/Value pair 0, (?:[`*?']|“)invalid(?:[*?']|”), in address element (?:[`*?']|“)very:invalid(?:[*?']|”) does not contain an equal sign",
                     "Key/Value pair 0, 'invalid', in address element 'very:invalid' does not contain an equal sign",
                 )
             ],
