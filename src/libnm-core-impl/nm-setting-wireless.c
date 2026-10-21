@@ -1086,7 +1086,7 @@ verify(NMSetting *setting, NMConnection *connection, GError **error)
                                                NM_SETTING_WIRELESS_MODE_AP,
                                                NM_SETTING_WIRELESS_MODE_MESH,
                                                NULL};
-    const char               *valid_bands[] = {"a", "bg", NULL};
+    const char               *valid_bands[] = {"a", "bg", "no6", NULL};
     guint                     i;
     gsize                     length;
     GError                   *local = NULL;
