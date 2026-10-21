@@ -28,3 +28,32 @@ networkmanager_build:
   artifacts:
     paths:
       - local_repo/*.pkg.tar.zst
+
+networkmanager_format:
+  stage: build
+  image: registry.gitlab.steamos.cloud/deckard/deckardos/holo/steamos-arm64-package-builder-main:latest
+  variables:
+    # The check compares against the upstream release tag
+    GIT_DEPTH: 0
+  script:
+    # The checkout belongs to the runner, not the image's build user
+    - git config --global --add safe.directory "${CI_PROJECT_DIR}"
+    - sudo pacman -Sy --noconfirm --needed clang python
+    - ./valve-ci/check-format.sh
+  tags:
+    - aarch64-linux-docker
+
+networkmanager_test:
+  stage: build
+  image: registry.gitlab.steamos.cloud/deckard/deckardos/holo/steamos-arm64-package-builder-main:latest
+  script:
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.steamos.cloud/deckard/deckardos/holo holo
+    - ulimit -c 0
+    - sudo pacman -Syy
+    - ./valve-ci/run-tests.sh holo/deckard/networkmanager
+  tags:
+    - aarch64-linux-docker
+  artifacts:
+    when: always
+    paths:
+      - build-tests/meson-logs/testlog.txt
