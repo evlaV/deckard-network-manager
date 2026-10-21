@@ -11,7 +11,22 @@ workflow:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH
 
+# Keep build dependencies and compiler output between pipelines. Each job gets
+# its own cache since the build and test jobs compile with different flags.
+.caches:
+  variables:
+    CCACHE_DIR: "${CI_PROJECT_DIR}/.cache/ccache"
+    CCACHE_MAXSIZE: "1G"
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .cache/
+  before_script:
+    - ./valve-ci/pacman-cache.sh restore .cache/pacman
+    - ccache --zero-stats
+
 networkmanager_build:
+  extends: .caches
   stage: build
   image: registry.gitlab.steamos.cloud/deckard/deckardos/holo/steamos-arm64-package-builder-main:latest
   variables:
@@ -23,6 +38,8 @@ networkmanager_build:
     - ulimit -c 0
     - sudo pacman -Syy
     - ./holo/.ci_scripts/build_package.sh holo/deckard/networkmanager
+    - ccache --show-stats
+    - ./valve-ci/pacman-cache.sh save .cache/pacman
   tags:
     - aarch64-linux-docker
   artifacts:
@@ -44,6 +61,7 @@ networkmanager_format:
     - aarch64-linux-docker
 
 networkmanager_test:
+  extends: .caches
   stage: build
   image: registry.gitlab.steamos.cloud/deckard/deckardos/holo/steamos-arm64-package-builder-main:latest
   script:
@@ -51,6 +69,8 @@ networkmanager_test:
     - ulimit -c 0
     - sudo pacman -Syy
     - ./valve-ci/run-tests.sh holo/deckard/networkmanager
+    - ccache --show-stats
+    - ./valve-ci/pacman-cache.sh save .cache/pacman
   tags:
     - aarch64-linux-docker
   artifacts:
