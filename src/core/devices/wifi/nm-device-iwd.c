@@ -814,20 +814,10 @@ check_connection_compatible(NMDevice     *device,
     }
 
     if (NM_IN_STRSET(mode, NULL, NM_SETTING_WIRELESS_MODE_INFRA)) {
-        /* 8021x networks can only be used if they've been provisioned on the IWD side and
-         * thus are Known Networks.
-         */
-        if (security == NM_IWD_NETWORK_SECURITY_8021X) {
-            if (!is_connection_known_network(priv->manager, connection)
-                && !nm_iwd_manager_is_recently_mirrored(priv->manager, ssid)) {
-                nm_utils_error_set_literal(error,
-                                           NM_UTILS_ERROR_CONNECTION_AVAILABLE_INCOMPATIBLE,
-                                           "802.1x connections must have IWD provisioning files");
-                return FALSE;
-            }
-        } else if (!NM_IN_SET(security,
-                              NM_IWD_NETWORK_SECURITY_OPEN,
-                              NM_IWD_NETWORK_SECURITY_PSK)) {
+        if (!NM_IN_SET(security,
+                       NM_IWD_NETWORK_SECURITY_OPEN,
+                       NM_IWD_NETWORK_SECURITY_PSK,
+                       NM_IWD_NETWORK_SECURITY_8021X)) {
             nm_utils_error_set_literal(error,
                                        NM_UTILS_ERROR_CONNECTION_AVAILABLE_INCOMPATIBLE,
                                        "IWD backend only supports Open, PSK and 802.1x network "

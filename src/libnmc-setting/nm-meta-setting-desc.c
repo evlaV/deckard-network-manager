@@ -8425,7 +8425,7 @@ static const NMMetaPropertyInfo *const property_infos_WIRELESS[] = {
     PROPERTY_INFO_WITH_DESC (NM_SETTING_WIRELESS_BAND,
         .property_type =                &_pt_gobject_string,
         .property_typ_data = DEFINE_PROPERTY_TYP_DATA (
-            .values_static =            NM_MAKE_STRV ("a", "bg"),
+            .values_static =            NM_MAKE_STRV ("a", "bg", "no6"),
         ),
     ),
     PROPERTY_INFO_WITH_DESC (NM_SETTING_WIRELESS_CHANNEL,

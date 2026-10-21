@@ -581,6 +581,8 @@ freq_to_band(guint32 freq)
         return 5;
     else if (freq >= 2412 && freq <= 2484)
         return 2;
+    else if (freq >= 5925 && freq <= 7115)
+        return 6;
     return 0;
 }
 
@@ -636,6 +638,8 @@ nm_wifi_ap_check_compatible(NMWifiAP *self, NMConnection *connection)
         if (!strcmp(band, "a") && ap_band != 5)
             return FALSE;
         else if (!strcmp(band, "bg") && ap_band != 2)
+            return FALSE;
+        else if (!strcmp(band, "no6") && ap_band == 6)
             return FALSE;
     }
 
