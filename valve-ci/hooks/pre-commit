@@ -1,0 +1,42 @@
+#!/bin/bash
+# Format the staged C changes with clang-format. If that changes anything,
+# stop the commit so the result can be reviewed and staged.
+#
+# Only staged lines are formatted, never whole files, so the diff against
+# upstream stays small. CI runs the same check (check-format.sh).
+#
+# Install (once per clone, applies to every worktree):
+#   git config core.hooksPath valve-ci/hooks
+# Skip for one commit:
+#   git commit --no-verify
+
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+[[ -f valve-ci/format-pathspec.sh ]] || exit 0   # branch without our CI files
+# shellcheck source=valve-ci/format-pathspec.sh
+source valve-ci/format-pathspec.sh
+
+if ! command -v git-clang-format >/dev/null; then
+    echo "pre-commit: git-clang-format not found, skipping format check" >&2
+    exit 0
+fi
+
+diff=$(git clang-format --staged --diff "${format_pathspec[@]}") && exit 0
+
+echo "$diff"
+echo
+# Writes the formatted staged content to the working tree. Exits 1 after
+# rewriting files, or 2 (changing nothing) if they have unstaged changes too.
+changed=$(git clang-format --staged "${format_pathspec[@]}" 2>/dev/null)
+if [[ $? -ne 1 ]]; then
+    echo "pre-commit: the staged changes above aren't clang-formatted. Some of"
+    echo "these files also have unstaged changes, so nothing was rewritten."
+    echo "Stage or stash the rest, then run 'git clang-format --staged'."
+    exit 1
+fi
+
+echo "pre-commit: formatted the staged changes above in the working tree."
+echo "$changed"
+echo "Review with 'git diff', 'git add' those files, and commit again."
+exit 1
