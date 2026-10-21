@@ -395,6 +395,47 @@ again:
     return f;
 }
 
+static const char *
+abg_freqs_to_string(void)
+{
+    static const char *str_abg = NULL;
+    const char       **f_p;
+    const char        *f;
+
+    f_p = &str_abg;
+
+again:
+    f = g_atomic_pointer_get(f_p);
+
+    if (G_UNLIKELY(!f)) {
+        nm_auto_str_buf NMStrBuf strbuf = NM_STR_BUF_INIT(800, FALSE);
+        const guint             *freqs;
+        int                      i;
+
+        freqs = nm_utils_wifi_2ghz_freqs();
+        for (i = 0; freqs[i]; i++) {
+            if (i > 0)
+                nm_str_buf_append_c(&strbuf, ' ');
+            nm_str_buf_append_printf(&strbuf, "%u", freqs[i]);
+        }
+
+        freqs = nm_utils_wifi_5ghz_freqs();
+        for (i = 0; freqs[i]; i++) {
+            nm_str_buf_append_c(&strbuf, ' ');
+            nm_str_buf_append_printf(&strbuf, "%u", freqs[i]);
+        }
+
+        f = g_strdup(nm_str_buf_get_str(&strbuf));
+
+        if (!g_atomic_pointer_compare_and_exchange(f_p, NULL, f)) {
+            g_free((char *) f);
+            goto again;
+        }
+    }
+
+    return f;
+}
+
 gboolean
 nm_supplicant_config_add_setting_macsec(NMSupplicantConfig    *self,
                                         NMSettingMacsec       *setting,
@@ -684,6 +725,8 @@ nm_supplicant_config_add_setting_wireless(NMSupplicantConfig *self,
                 freqs = wifi_freqs_to_string(FALSE);
             else if (nm_streq(band, "bg"))
                 freqs = wifi_freqs_to_string(TRUE);
+            else if (nm_streq(band, "no6"))
+                freqs = abg_freqs_to_string();
 
             if (freqs
                 && !nm_supplicant_config_add_option(self,
