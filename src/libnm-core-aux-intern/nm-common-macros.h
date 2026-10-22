@@ -33,6 +33,9 @@
 #define NM_AUTH_PERMISSION_ENABLE_DISABLE_CONNECTIVITY_CHECK \
     "org.freedesktop.NetworkManager.enable-disable-connectivity-check"
 #define NM_AUTH_PERMISSION_WIFI_SCAN "org.freedesktop.NetworkManager.wifi.scan"
+#define NM_AUTH_PERMISSION_WIFI_PERFORMANCE "org.freedesktop.NetworkManager.wifi.performance"
+#define NM_AUTH_PERMISSION_WIFI_POWERSAVE_PREFERENCE \
+    "org.freedesktop.NetworkManager.wifi.powersave-preference"
 
 #define NM_CLONED_MAC_PRESERVE    "preserve"
 #define NM_CLONED_MAC_PERMANENT   "permanent"

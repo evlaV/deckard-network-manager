@@ -300,6 +300,8 @@ void               nm_global_dns_config_to_dbus(const NMGlobalDnsConfig *dns_con
 
 void nm_config_data_get_warnings(const NMConfigData *self, GPtrArray *warnings);
 
+NMTernary nm_config_data_get_wifi_powersave_preference(const NMConfigData *self);
+
 /* private accessors */
 GKeyFile *_nm_config_data_get_keyfile(const NMConfigData *self);
 GKeyFile *_nm_config_data_get_keyfile_user(const NMConfigData *self);

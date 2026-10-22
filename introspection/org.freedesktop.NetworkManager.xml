@@ -9,6 +9,58 @@
     <annotation name="org.gtk.GDBus.C.Name" value="Manager"/>
 
     <!--
+        SetWifiPowerSavePreference:
+        @preference: 1 to enable power save, 0 to disable it, -1 to clear the preference.
+
+        EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
+        May change or be removed without notice.
+    -->
+    <method name="SetWifiPowerSavePreference">
+        <arg name="preference" type="i" direction="in"/>
+    </method>
+
+    <!--
+        WifiPowerSavePreference
+
+        EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
+        May change or be removed without notice.
+
+        User preference for WiFi power save: 1 enabled, 0 disabled, -1 no user preference.
+    -->
+    <property name="WifiPowerSavePreference"
+          type="i"
+          access="read"/>
+
+    <!--
+        AcquireWifiPerformanceLease:
+        @mode: The kind of traffic to tune Wi-Fi for:
+            - "interactive": interactive traffic (e.g. game streaming, ssh), as opposed to bulk transfers.
+        @reason: Reason for requesting the lease. Used in debugging.
+        @options: Further options for the lease. Must be empty.
+
+        EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
+        May change or be removed without notice.
+
+        Request a performance lease, which tunes Wi-Fi for the given mode until either the lease is released or the caller dies. Persists across reconnects and resets of NetworkManager.
+        The lease belongs to the caller's D-Bus connection, which holds at most one. Acquiring the same mode again does nothing, and acquiring another mode fails.
+    -->
+    <method name="AcquireWifiPerformanceLease">
+        <arg name="mode" type="s" direction="in"/>
+        <arg name="reason" type="s" direction="in"/>
+        <arg name="options" type="a{sv}" direction="in"/>
+    </method>
+
+    <!--
+        ReleaseWifiPerformanceLease:
+
+        EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
+        May change or be removed without notice.
+
+        Releases the caller's lease. Fails if the caller holds none.
+    -->
+    <method name="ReleaseWifiPerformanceLease">
+    </method>
+    <!--
         Reload:
         @flags: Optional flags to specify which parts shall be reloaded.
 
