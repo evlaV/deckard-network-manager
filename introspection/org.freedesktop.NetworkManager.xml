@@ -34,15 +34,33 @@
     <!--
         AcquireWifiPerformanceLease:
         @mode: The kind of traffic to tune Wi-Fi for:
-            - "interactive": interactive traffic (e.g. game streaming, ssh), as opposed to bulk transfers.
+            - "interactive": interactive traffic (e.g. game streaming, ssh)
         @reason: Reason for requesting the lease. Used in debugging.
         @options: Further options for the lease. Must be empty.
 
         EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
         May change or be removed without notice.
 
-        Request a performance lease, which tunes Wi-Fi for the given mode until either the lease is released or the caller dies. Persists across reconnects and resets of NetworkManager.
-        The lease belongs to the caller's D-Bus connection, which holds at most one. Acquiring the same mode again does nothing, and acquiring another mode fails.
+        Request a performance lease, which tunes Wi-Fi for the given mode until the the lease is released.
+        The lease is owned by the caller's D-Bus connection. Each connection can hold at most one lease at a time.
+        If the caller's bus connection closes, its lease is released.
+
+        Succeeds if the caller acquired a lease in @mode or if the lease was already held via a previous call to AcquireWifiPerformanceLease.
+
+        Fails with:
+           - InvalidArguments if @mode is unknown or @options is not empty.
+           - PermissionDenied if the caller is not authorized.
+           - AlreadyEnabledOrDisabled if the caller holds a lease in another mode.
+           - Failed if the lease could not be saved (e.g. /run is full).
+           - A D-Bus error if NetworkManager did not reply:
+                - ServiceUnknown if NetworkManager is stopped.
+                - NoReply if NetworkManager exited before replying (e.g. it is restarting). In this case, the lease may or may not be held:
+                  callers must wait for NetworkManager to appear on the bus, then retry or else call ReleaseWifiPerformanceLease
+                  and have it return success.
+                - UnknownMethod if this NetworkManager does not support leases.
+                - AccessDenied if the bus policy does not allow the call.
+
+        Do not call this method with NO_REPLY_EXPECTED.
     -->
     <method name="AcquireWifiPerformanceLease">
         <arg name="mode" type="s" direction="in"/>
@@ -56,7 +74,15 @@
         EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
         May change or be removed without notice.
 
-        Releases the caller's lease. Fails if the caller holds none.
+        Releases the caller's lease.
+
+        Succeeds if the caller holds no lease afterward.
+
+        Fails with:
+           - Failed if the release could not be saved. The lease is still held.
+           - A D-Bus error if NetworkManager did not reply (see AcquireWifiPerformanceLease).
+
+        Do not call this method with NO_REPLY_EXPECTED.
     -->
     <method name="ReleaseWifiPerformanceLease">
     </method>

@@ -5041,11 +5041,10 @@ impl_manager_release_wifi_performance_lease(NMDBusObject                      *o
                                             GDBusMethodInvocation             *invocation,
                                             GVariant                          *parameters)
 {
-    if (!nm_wifi_performance_release(nm_wifi_performance_get(), sender)) {
-        g_dbus_method_invocation_return_error_literal(invocation,
-                                                      NM_MANAGER_ERROR,
-                                                      NM_MANAGER_ERROR_FAILED,
-                                                      "No performance lease held by the caller");
+    gs_free_error GError *error = NULL;
+
+    if (!nm_wifi_performance_release(nm_wifi_performance_get(), sender, &error)) {
+        g_dbus_method_invocation_take_error(invocation, g_steal_pointer(&error));
         return;
     }
 

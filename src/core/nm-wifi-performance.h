@@ -57,8 +57,9 @@ gboolean nm_wifi_performance_acquire(NMWifiPerformance    *self,
                                      NMWifiPerformanceMode mode,
                                      const char           *reason,
                                      GError              **error);
-/* Returns FALSE if @sender holds no lease. */
-gboolean nm_wifi_performance_release(NMWifiPerformance *self, const char *sender);
+/* Returns TRUE if @sender holds no lease. Returns FALSE, keeping the lease,
+ * if the release could not be saved. */
+gboolean nm_wifi_performance_release(NMWifiPerformance *self, const char *sender, GError **error);
 
 /* Picks up the leases saved by an NM that was restarted. */
 void nm_wifi_performance_restore(NMWifiPerformance *self);

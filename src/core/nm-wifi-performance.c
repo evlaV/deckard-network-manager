@@ -378,7 +378,7 @@ nm_wifi_performance_acquire(NMWifiPerformance    *self,
               wifi_performance_mode_to_string(lease->mode));
         g_set_error_literal(error,
                             NM_MANAGER_ERROR,
-                            NM_MANAGER_ERROR_FAILED,
+                            NM_MANAGER_ERROR_ALREADY_ENABLED_OR_DISABLED,
                             "The caller already holds a performance lease in another mode");
         return FALSE;
     }
@@ -407,17 +407,34 @@ nm_wifi_performance_acquire(NMWifiPerformance    *self,
 }
 
 gboolean
-nm_wifi_performance_release(NMWifiPerformance *self, const char *sender)
+nm_wifi_performance_release(NMWifiPerformance *self, const char *sender, GError **error)
 {
     WifiPerformanceLease *lease;
     NMWifiPerformanceMode old_modes;
+    CList                *next;
 
     g_return_val_if_fail(NM_IS_WIFI_PERFORMANCE(self), FALSE);
     g_return_val_if_fail(sender, FALSE);
+    g_return_val_if_fail(!error || !*error, FALSE);
 
+    /* Releasing is idempotent: a holder that is unsure whether an earlier
+     * Release went through (e.g. NM restarted before replying) can call it
+     * again until it succeeds. */
     lease = wifi_performance_find_lease(self, sender);
     if (!lease) {
-        _LOGI("release by %s refused: holds no lease", sender);
+        _LOGI("release by %s: holds no lease, nothing to do", sender);
+        return TRUE;
+    }
+
+    old_modes = nm_wifi_performance_get_modes(self);
+    next      = lease->lst.next;
+    c_list_unlink(&lease->lst);
+    if (!wifi_performance_save(self)) {
+        c_list_link_before(next, &lease->lst);
+        g_set_error_literal(error,
+                            NM_MANAGER_ERROR,
+                            NM_MANAGER_ERROR_FAILED,
+                            "Could not save the release of the performance lease");
         return FALSE;
     }
 
@@ -425,9 +442,8 @@ nm_wifi_performance_release(NMWifiPerformance *self, const char *sender)
           wifi_performance_mode_to_string(lease->mode),
           sender,
           lease->reason);
-    old_modes = nm_wifi_performance_get_modes(self);
     wifi_performance_remove_lease(lease);
-    wifi_performance_changed(self, old_modes);
+    wifi_performance_notify(self, old_modes);
     return TRUE;
 }
 
