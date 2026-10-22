@@ -174,6 +174,7 @@ libNetworkManager = static_library(
     'nm-session-monitor.c',
     'nm-power-monitor.c',
     'nm-priv-helper-call.c',
+    'nm-wifi-performance.c',
   ),
   dependencies: nm_deps,
   link_with: [

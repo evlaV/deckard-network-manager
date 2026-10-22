@@ -47,6 +47,8 @@
 #define NM_MANAGER_ALL_DEVICES                  "all-devices"
 #define NM_MANAGER_CHECKPOINTS                  "checkpoints"
 
+#define NM_MANAGER_WIFI_POWERSAVE_PREFERENCE "wifi-powersave-preference"
+
 /* Not exported */
 #define NM_MANAGER_SLEEPING "sleeping"
 

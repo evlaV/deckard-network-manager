@@ -11,6 +11,8 @@
 #include "nm-wifi-ap.h"
 #include "nm-device-wifi.h"
 #include "nm-dbus-manager.h"
+#include "nm-config.h"
+#include "devices/nm-device-logging.h"
 
 #if WITH_IWD
 #include "nm-device-iwd.h"
@@ -171,3 +173,62 @@ const NMDBusInterfaceInfoExtended nm_interface_info_device_wireless = {
                                                            "x",
                                                            NM_DEVICE_WIFI_LAST_SCAN), ), ),
 };
+
+/*****************************************************************************/
+
+void
+nm_wifi_common_set_powersave(NMDevice *device, NMSettingWirelessPowersave val)
+{
+    NMDevice *self = device;
+
+    _LOGT(LOGD_WIFI, "powersave is set to %u", (unsigned) val);
+
+    if (val == NM_SETTING_WIRELESS_POWERSAVE_IGNORE)
+        return;
+
+    nm_platform_wifi_set_powersave(nm_device_get_platform(device),
+                                   nm_device_get_ifindex(device),
+                                   val == NM_SETTING_WIRELESS_POWERSAVE_ENABLE);
+}
+
+NMSettingWirelessPowersave
+nm_wifi_common_resolve_powersave(NMDevice *device, gboolean has_interactive_lease)
+{
+    NMSettingWirelessPowersave val;
+    NMSettingWireless         *s_wireless;
+
+    s_wireless = nm_device_get_applied_setting(device, NM_TYPE_SETTING_WIRELESS);
+
+    /* Powersave only exists for client connections. The kernel refuses in all other cases. */
+    if (!NM_IN_STRSET(nm_setting_wireless_get_mode(s_wireless),
+                      NULL,
+                      NM_SETTING_WIRELESS_MODE_INFRA))
+        return NM_SETTING_WIRELESS_POWERSAVE_IGNORE;
+
+    /* If an interactive lease is held, it has priority over profiles or
+     * the user pref. */
+    if (has_interactive_lease)
+        return NM_SETTING_WIRELESS_POWERSAVE_DISABLE;
+
+    /* A non-default wifi.powersave value in the connection profile has priority
+     * over the user pref: this allows users to override powersave per connection. */
+    val = nm_setting_wireless_get_powersave(s_wireless);
+    if (val == NM_SETTING_WIRELESS_POWERSAVE_DEFAULT) {
+        NMTernary preference;
+
+        preference = nm_config_data_get_wifi_powersave_preference(NM_CONFIG_GET_DATA);
+        if (preference != NM_TERNARY_DEFAULT)
+            return preference ? NM_SETTING_WIRELESS_POWERSAVE_ENABLE
+                              : NM_SETTING_WIRELESS_POWERSAVE_DISABLE;
+
+        /* If the user preference has not been set, fall back to the device default. */
+        val = nm_config_data_get_connection_default_int64(NM_CONFIG_GET_DATA,
+                                                          "wifi.powersave",
+                                                          device,
+                                                          NM_SETTING_WIRELESS_POWERSAVE_IGNORE,
+                                                          NM_SETTING_WIRELESS_POWERSAVE_ENABLE,
+                                                          NM_SETTING_WIRELESS_POWERSAVE_IGNORE);
+    }
+
+    return val;
+}

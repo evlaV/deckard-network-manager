@@ -47,6 +47,7 @@
 #include "nm-rfkill-manager.h"
 #include "nm-session-monitor.h"
 #include "nm-power-monitor.h"
+#include "nm-wifi-performance.h"
 #include "settings/nm-settings-connection.h"
 #include "settings/nm-settings.h"
 #include "vpn/nm-vpn-manager.h"
@@ -169,6 +170,7 @@ NM_GOBJECT_PROPERTIES_DEFINE(NMManager,
                              PROP_GLOBAL_DNS_CONFIGURATION,
                              PROP_ALL_DEVICES,
                              PROP_CHECKPOINTS,
+                             PROP_WIFI_POWERSAVE_PREFERENCE,
 
                              /* Not exported */
                              PROP_SLEEPING, );
@@ -1737,6 +1739,11 @@ _config_changed_cb(NMConfig           *config,
             != (!nm_config_data_get_connectivity_uri(old_data)))
             _notify(self, PROP_CONNECTIVITY_CHECK_AVAILABLE);
         _notify(self, PROP_CONNECTIVITY_CHECK_URI);
+    }
+
+    if (nm_config_data_get_wifi_powersave_preference(config_data)
+        != nm_config_data_get_wifi_powersave_preference(old_data)) {
+        _notify(self, PROP_WIFI_POWERSAVE_PREFERENCE);
     }
 
     g_object_thaw_notify(G_OBJECT(self));
@@ -4863,6 +4870,186 @@ impl_manager_get_device_by_ip_iface(NMDBusObject                      *obj,
     }
 
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(o)", path));
+}
+
+static void
+_set_wifi_powersave_preference_auth_cb(NMAuthChain           *chain,
+                                       GDBusMethodInvocation *context,
+                                       gpointer               user_data)
+{
+    NMManager        *self = NM_MANAGER(user_data);
+    NMManagerPrivate *priv = NM_MANAGER_GET_PRIVATE(self);
+    NMTernary         preference;
+
+    nm_assert(G_IS_DBUS_METHOD_INVOCATION(context));
+
+    c_list_unlink(nm_auth_chain_parent_lst_list(chain));
+
+    if (nm_auth_chain_get_result(chain, NM_AUTH_PERMISSION_WIFI_POWERSAVE_PREFERENCE)
+        != NM_AUTH_CALL_RESULT_YES) {
+        g_dbus_method_invocation_return_error_literal(context,
+                                                      NM_MANAGER_ERROR,
+                                                      NM_MANAGER_ERROR_PERMISSION_DENIED,
+                                                      "Not authorized to change the Wi-Fi "
+                                                      "power save preference");
+        return;
+    }
+
+    preference = GPOINTER_TO_INT(nm_auth_chain_get_data(chain, "preference"));
+    nm_config_set_wifi_powersave_preference(priv->config, preference);
+
+    g_dbus_method_invocation_return_value(context, NULL);
+}
+
+static void
+impl_manager_set_wifi_powersave_preference(NMDBusObject                      *obj,
+                                           const NMDBusInterfaceInfoExtended *interface_info,
+                                           const NMDBusMethodInfoExtended    *method_info,
+                                           GDBusConnection                   *connection,
+                                           const char                        *sender,
+                                           GDBusMethodInvocation             *invocation,
+                                           GVariant                          *parameters)
+{
+    NMManager        *self = NM_MANAGER(obj);
+    NMManagerPrivate *priv = NM_MANAGER_GET_PRIVATE(self);
+    NMAuthChain      *chain;
+    gint32            preference;
+
+    g_variant_get(parameters, "(i)", &preference);
+
+    if (!NM_IN_SET(preference, NM_TERNARY_DEFAULT, NM_TERNARY_FALSE, NM_TERNARY_TRUE)) {
+        g_dbus_method_invocation_return_error(invocation,
+                                              NM_MANAGER_ERROR,
+                                              NM_MANAGER_ERROR_INVALID_ARGUMENTS,
+                                              "Invalid Wi-Fi power save preference %d",
+                                              (int) preference);
+        return;
+    }
+
+    chain = nm_auth_chain_new_context(invocation, _set_wifi_powersave_preference_auth_cb, self);
+    if (!chain) {
+        g_dbus_method_invocation_return_error_literal(invocation,
+                                                      NM_MANAGER_ERROR,
+                                                      NM_MANAGER_ERROR_PERMISSION_DENIED,
+                                                      NM_UTILS_ERROR_MSG_REQ_AUTH_FAILED);
+        return;
+    }
+
+    c_list_link_tail(&priv->auth_lst_head, nm_auth_chain_parent_lst_list(chain));
+    nm_auth_chain_set_data(chain, "preference", GINT_TO_POINTER(preference), NULL);
+    nm_auth_chain_add_call(chain, NM_AUTH_PERMISSION_WIFI_POWERSAVE_PREFERENCE, TRUE);
+}
+
+static void
+_acquire_wifi_performance_lease_auth_cb(NMAuthChain           *chain,
+                                        GDBusMethodInvocation *context,
+                                        gpointer               user_data)
+{
+    gs_free_error GError *error = NULL;
+    NMWifiPerformanceMode mode;
+    const char           *reason;
+
+    nm_assert(G_IS_DBUS_METHOD_INVOCATION(context));
+
+    c_list_unlink(nm_auth_chain_parent_lst_list(chain));
+
+    if (nm_auth_chain_get_result(chain, NM_AUTH_PERMISSION_WIFI_PERFORMANCE)
+        != NM_AUTH_CALL_RESULT_YES) {
+        g_dbus_method_invocation_return_error_literal(context,
+                                                      NM_MANAGER_ERROR,
+                                                      NM_MANAGER_ERROR_PERMISSION_DENIED,
+                                                      "Not authorized to acquire a Wi-Fi "
+                                                      "performance lease");
+        return;
+    }
+
+    mode   = GPOINTER_TO_UINT(nm_auth_chain_get_data(chain, "mode"));
+    reason = nm_auth_chain_get_data(chain, "reason");
+
+    if (!nm_wifi_performance_acquire(nm_wifi_performance_get(),
+                                     g_dbus_method_invocation_get_connection(context),
+                                     g_dbus_method_invocation_get_sender(context),
+                                     mode,
+                                     reason,
+                                     &error)) {
+        g_dbus_method_invocation_take_error(context, g_steal_pointer(&error));
+        return;
+    }
+
+    g_dbus_method_invocation_return_value(context, NULL);
+}
+
+static void
+impl_manager_acquire_wifi_performance_lease(NMDBusObject                      *obj,
+                                            const NMDBusInterfaceInfoExtended *interface_info,
+                                            const NMDBusMethodInfoExtended    *method_info,
+                                            GDBusConnection                   *connection,
+                                            const char                        *sender,
+                                            GDBusMethodInvocation             *invocation,
+                                            GVariant                          *parameters)
+{
+    NMManager                 *self    = NM_MANAGER(obj);
+    NMManagerPrivate          *priv    = NM_MANAGER_GET_PRIVATE(self);
+    gs_unref_variant GVariant *options = NULL;
+    NMAuthChain               *chain;
+    NMWifiPerformanceMode      mode;
+    const char                *mode_str;
+    const char                *reason;
+
+    g_variant_get(parameters, "(&s&s@a{sv})", &mode_str, &reason, &options);
+
+    mode = nm_wifi_performance_mode_from_string(mode_str);
+    if (mode == NM_WIFI_PERFORMANCE_MODE_NONE) {
+        g_dbus_method_invocation_return_error(invocation,
+                                              NM_MANAGER_ERROR,
+                                              NM_MANAGER_ERROR_INVALID_ARGUMENTS,
+                                              "Unknown Wi-Fi performance mode \"%s\"",
+                                              mode_str);
+        return;
+    }
+
+    /* No options are defined yet. */
+    if (g_variant_n_children(options) > 0) {
+        g_dbus_method_invocation_return_error_literal(invocation,
+                                                      NM_MANAGER_ERROR,
+                                                      NM_MANAGER_ERROR_INVALID_ARGUMENTS,
+                                                      "Unknown extra option passed");
+        return;
+    }
+
+    chain = nm_auth_chain_new_context(invocation, _acquire_wifi_performance_lease_auth_cb, self);
+    if (!chain) {
+        g_dbus_method_invocation_return_error_literal(invocation,
+                                                      NM_MANAGER_ERROR,
+                                                      NM_MANAGER_ERROR_PERMISSION_DENIED,
+                                                      NM_UTILS_ERROR_MSG_REQ_AUTH_FAILED);
+        return;
+    }
+
+    c_list_link_tail(&priv->auth_lst_head, nm_auth_chain_parent_lst_list(chain));
+    nm_auth_chain_set_data(chain, "mode", GUINT_TO_POINTER(mode), NULL);
+    nm_auth_chain_set_data(chain, "reason", g_strdup(reason), g_free);
+    nm_auth_chain_add_call(chain, NM_AUTH_PERMISSION_WIFI_PERFORMANCE, TRUE);
+}
+
+static void
+impl_manager_release_wifi_performance_lease(NMDBusObject                      *obj,
+                                            const NMDBusInterfaceInfoExtended *interface_info,
+                                            const NMDBusMethodInfoExtended    *method_info,
+                                            GDBusConnection                   *connection,
+                                            const char                        *sender,
+                                            GDBusMethodInvocation             *invocation,
+                                            GVariant                          *parameters)
+{
+    if (!nm_wifi_performance_release(nm_wifi_performance_get(), sender)) {
+        g_dbus_method_invocation_return_error_literal(invocation,
+                                                      NM_MANAGER_ERROR,
+                                                      NM_MANAGER_ERROR_FAILED,
+                                                      "No performance lease held by the caller");
+        return;
+    }
+
+    g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
 static gboolean
@@ -8065,6 +8252,10 @@ nm_manager_start(NMManager *self, GError **error)
     NMManagerPrivate *priv = NM_MANAGER_GET_PRIVATE(self);
     guint             i;
 
+    /* Load any active performance leases before the devices exist
+     * so they activate with the correct performance profile. */
+    nm_wifi_performance_restore(nm_wifi_performance_get());
+
     nm_device_factory_manager_load_factories(_register_device_factory, self);
 
     nm_device_factory_manager_for_each_factory(start_factory, NULL);
@@ -9136,6 +9327,11 @@ get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
                       nm_checkpoint_manager_get_checkpoint_paths(priv->checkpoint_mgr, NULL))
                 : NULL);
         break;
+    case PROP_WIFI_POWERSAVE_PREFERENCE:
+        g_value_set_int(
+            value,
+            nm_config_data_get_wifi_powersave_preference(nm_config_get_data(priv->config)));
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
         break;
@@ -9488,7 +9684,25 @@ static const NMDBusInterfaceInfoExtended interface_info_manager = {
                     .in_args = NM_DEFINE_GDBUS_ARG_INFOS(
                         NM_DEFINE_GDBUS_ARG_INFO("checkpoint", "o"),
                         NM_DEFINE_GDBUS_ARG_INFO("add_timeout", "u"), ), ),
-                .handle = impl_manager_checkpoint_adjust_rollback_timeout, ), ),
+                .handle = impl_manager_checkpoint_adjust_rollback_timeout, ),
+
+            NM_DEFINE_DBUS_METHOD_INFO_EXTENDED(
+                NM_DEFINE_GDBUS_METHOD_INFO_INIT(
+                    "SetWifiPowerSavePreference",
+                    .in_args =
+                        NM_DEFINE_GDBUS_ARG_INFOS(NM_DEFINE_GDBUS_ARG_INFO("preference", "i"), ), ),
+                .handle = impl_manager_set_wifi_powersave_preference, ),
+            NM_DEFINE_DBUS_METHOD_INFO_EXTENDED(
+                NM_DEFINE_GDBUS_METHOD_INFO_INIT(
+                    "AcquireWifiPerformanceLease",
+                    .in_args = NM_DEFINE_GDBUS_ARG_INFOS(
+                        NM_DEFINE_GDBUS_ARG_INFO("mode", "s"),
+                        NM_DEFINE_GDBUS_ARG_INFO("reason", "s"),
+                        NM_DEFINE_GDBUS_ARG_INFO("options", "a{sv}"), ), ),
+                .handle = impl_manager_acquire_wifi_performance_lease, ),
+            NM_DEFINE_DBUS_METHOD_INFO_EXTENDED(
+                NM_DEFINE_GDBUS_METHOD_INFO_INIT("ReleaseWifiPerformanceLease", ),
+                .handle = impl_manager_release_wifi_performance_lease, ), ),
         .signals    = NM_DEFINE_GDBUS_SIGNAL_INFOS(&signal_info_check_permissions,
                                                 &signal_info_state_changed,
                                                 &signal_info_device_added,
@@ -9579,7 +9793,11 @@ static const NMDBusInterfaceInfoExtended interface_info_manager = {
                 "a{sv}",
                 NM_MANAGER_GLOBAL_DNS_CONFIGURATION,
                 NM_AUTH_PERMISSION_SETTINGS_MODIFY_GLOBAL_DNS,
-                NM_AUDIT_OP_NET_CONTROL), ), ),
+                NM_AUDIT_OP_NET_CONTROL),
+            NM_DEFINE_DBUS_PROPERTY_INFO_EXTENDED_READABLE(
+                "WifiPowerSavePreference",
+                "i",
+                NM_MANAGER_WIFI_POWERSAVE_PREFERENCE), ), ),
 };
 
 static void
@@ -9821,6 +10039,15 @@ nm_manager_class_init(NMManagerClass *manager_class)
                            "",
                            G_TYPE_STRV,
                            G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+    obj_properties[PROP_WIFI_POWERSAVE_PREFERENCE] =
+        g_param_spec_int(NM_MANAGER_WIFI_POWERSAVE_PREFERENCE,
+                         "",
+                         "",
+                         NM_TERNARY_DEFAULT,
+                         NM_TERNARY_TRUE,
+                         NM_TERNARY_DEFAULT,
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
     g_object_class_install_properties(object_class, _PROPERTY_ENUMS_LAST, obj_properties);
 

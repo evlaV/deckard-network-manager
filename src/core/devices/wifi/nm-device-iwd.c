@@ -27,6 +27,7 @@
 #include "libnm-std-aux/nm-dbus-compat.h"
 #include "nm-utils.h"
 #include "nm-wifi-common.h"
+#include "nm-wifi-performance.h"
 #include "nm-wifi-utils.h"
 #include "settings/nm-settings-connection.h"
 #include "settings/nm-settings.h"
@@ -90,6 +91,8 @@ typedef struct {
     };
 
     NMIwdManager *manager;
+
+    NMWifiPerformance *wifi_performance;
 } NMDeviceIwdPrivate;
 
 struct _NMDeviceIwd {
@@ -2260,6 +2263,51 @@ add_new:
     return NM_ACT_STAGE_RETURN_SUCCESS;
 }
 
+static void
+wifi_performance_sync(NMDeviceIwd *self)
+{
+    NMDevice             *device = NM_DEVICE(self);
+    NMWifiPerformanceMode modes;
+    gboolean              has_interactive_lease;
+
+    /* Not connected: nothing to apply to. Stage2 applies it on the next connect. */
+    if (!nm_device_get_applied_connection(device))
+        return;
+
+    modes = nm_wifi_performance_get_modes(NM_DEVICE_IWD_GET_PRIVATE(self)->wifi_performance);
+    has_interactive_lease = NM_FLAGS_HAS(modes, NM_WIFI_PERFORMANCE_MODE_INTERACTIVE);
+
+    nm_wifi_common_set_powersave(device,
+                                 nm_wifi_common_resolve_powersave(device, has_interactive_lease));
+}
+
+static void
+wifi_performance_leases_changed(NMWifiPerformance *wifi_performance, NMDeviceIwd *self)
+{
+    wifi_performance_sync(self);
+}
+
+static void
+powersave_pref_changed(NMConfig           *config,
+                       NMConfigData       *config_data,
+                       NMConfigChangeFlags changes,
+                       NMConfigData       *old_data,
+                       NMDeviceIwd        *self)
+{
+    NMTernary old_powersave_pref;
+    NMTernary new_powersave_pref;
+
+    old_powersave_pref = nm_config_data_get_wifi_powersave_preference(old_data);
+    new_powersave_pref = nm_config_data_get_wifi_powersave_preference(config_data);
+
+    /* Note: the global wifi.powersave default can only change with the user
+     * configuration files. */
+    if (old_powersave_pref != new_powersave_pref
+        || NM_FLAGS_HAS(changes, NM_CONFIG_CHANGE_VALUES_USER)) {
+        wifi_performance_sync(self);
+    }
+}
+
 static NMActStageReturn
 act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 {
@@ -2286,6 +2334,8 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
             NM_SET_OUT(out_failure_reason, NM_DEVICE_STATE_REASON_SUPPLICANT_FAILED);
             goto out_fail;
         }
+
+        wifi_performance_sync(self);
 
         /* With priv->iwd_autoconnect we have to let IWD handle retries for
          * infrastructure networks.  IWD will not necessarily retry the same
@@ -3819,6 +3869,17 @@ nm_device_iwd_init(NMDeviceIwd *self)
 
     /* Make sure the manager is running */
     priv->manager = g_object_ref(nm_iwd_manager_get());
+
+    g_signal_connect(nm_config_get(),
+                     NM_CONFIG_SIGNAL_CONFIG_CHANGED,
+                     G_CALLBACK(powersave_pref_changed),
+                     self);
+
+    priv->wifi_performance = g_object_ref(nm_wifi_performance_get());
+    g_signal_connect(priv->wifi_performance,
+                     NM_WIFI_PERFORMANCE_LEASES_CHANGED,
+                     G_CALLBACK(wifi_performance_leases_changed),
+                     self);
 }
 
 NMDevice *
@@ -3845,6 +3906,13 @@ dispose(GObject *object)
     nm_clear_g_cancellable(&priv->cancellable);
 
     g_signal_handlers_disconnect_by_func(self, autoconnect_changed, self);
+    g_signal_handlers_disconnect_by_func(nm_config_get(), powersave_pref_changed, self);
+    if (priv->wifi_performance) {
+        g_signal_handlers_disconnect_by_func(priv->wifi_performance,
+                                             wifi_performance_leases_changed,
+                                             self);
+        g_clear_object(&priv->wifi_performance);
+    }
     nm_device_iwd_set_dbus_object(self, NULL);
 
     G_OBJECT_CLASS(nm_device_iwd_parent_class)->dispose(object);
