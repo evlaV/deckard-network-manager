@@ -41,7 +41,7 @@ gboolean nm_wifi_performance_acquire(NMWifiPerformance    *self,
                                      NMWifiPerformanceMode mode,
                                      const char           *reason,
                                      GError              **error);
-gboolean nm_wifi_performance_release(NMWifiPerformance *self, const char *sender);
+gboolean nm_wifi_performance_release(NMWifiPerformance *self, const char *sender, GError **error);
 
 void nm_wifi_performance_restore(NMWifiPerformance *self);
 

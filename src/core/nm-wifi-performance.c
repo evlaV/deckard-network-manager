@@ -331,7 +331,7 @@ nm_wifi_performance_acquire(NMWifiPerformance    *self,
               wifi_performance_mode_to_string(lease->mode));
         g_set_error_literal(error,
                             NM_MANAGER_ERROR,
-                            NM_MANAGER_ERROR_FAILED,
+                            NM_MANAGER_ERROR_ALREADY_ENABLED_OR_DISABLED,
                             "The caller already holds a performance lease in another mode");
         return FALSE;
     }
@@ -360,17 +360,37 @@ nm_wifi_performance_acquire(NMWifiPerformance    *self,
 }
 
 gboolean
-nm_wifi_performance_release(NMWifiPerformance *self, const char *sender)
+nm_wifi_performance_release(NMWifiPerformance *self, const char *sender, GError **error)
 {
     WifiPerformanceLease *lease;
     NMWifiPerformanceMode old_modes;
+    CList                *next;
 
     g_return_val_if_fail(NM_IS_WIFI_PERFORMANCE(self), FALSE);
     g_return_val_if_fail(sender, FALSE);
+    g_return_val_if_fail(!error || !*error, FALSE);
 
+    /* Not holding a lease is not an error. A client that doesn't know whether
+     * an earlier release went through, for example because NM restarted
+     * before replying, can retry until it succeeds. */
     lease = wifi_performance_find_lease(self, sender);
     if (!lease) {
-        _LOGI("release by %s refused: holds no performance lease", sender);
+        _LOGI("release by %s: holds no performance lease, nothing to do", sender);
+        return TRUE;
+    }
+
+    /* Only drop the lease after saving the file without it. Otherwise NM
+     * would restore it after a restart, and the client would hold it until it
+     * leaves the bus. On failure, put the lease back where it was. */
+    old_modes = nm_wifi_performance_get_modes(self);
+    next      = lease->lst.next;
+    c_list_unlink(&lease->lst);
+    if (!wifi_performance_save(self)) {
+        c_list_link_before(next, &lease->lst);
+        g_set_error_literal(error,
+                            NM_MANAGER_ERROR,
+                            NM_MANAGER_ERROR_FAILED,
+                            "Could not save the release of the performance lease");
         return FALSE;
     }
 
@@ -378,9 +398,8 @@ nm_wifi_performance_release(NMWifiPerformance *self, const char *sender)
           wifi_performance_mode_to_string(lease->mode),
           sender,
           lease->reason);
-    old_modes = nm_wifi_performance_get_modes(self);
     wifi_performance_remove_lease(lease);
-    wifi_performance_changed(self, old_modes);
+    wifi_performance_notify(self, old_modes);
     return TRUE;
 }
 
