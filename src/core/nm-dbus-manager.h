@@ -81,6 +81,8 @@ gboolean nm_dbus_manager_ensure_uid(NMDBusManager         *self,
 
 gboolean nm_dbus_manager_get_unix_user(NMDBusManager *self, const char *sender, gulong *out_uid);
 
+gboolean nm_dbus_manager_get_unix_pid(NMDBusManager *self, const char *sender, gulong *out_pid);
+
 gboolean nm_dbus_manager_get_caller_info_from_message(NMDBusManager   *self,
                                                       GDBusConnection *connection,
                                                       GDBusMessage    *message,

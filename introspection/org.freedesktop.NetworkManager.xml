@@ -32,10 +32,28 @@
           access="read"/>
 
     <!--
+        GetWifiPerformanceLeases:
+        @leases: the list of held Wi-Fi performance leases. Each entry contains:
+             - mode: performance mode requested by the lease holder.
+             - reason: human-readable reason supplied by the lease holder.
+             - dbus_owner: D-Bus name of the connection holding the lease.
+             - uid: Unix user ID of the lease holder. G_MAXUINT32 if unavaiable. 
+             - pid: Process ID of the lease holder. G_MAXUINT32 if unavailable.
+
+        EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
+        May change or be removed without notice.
+
+        Returns all held Wi-Fi performance leases.
+    -->
+    <method name="GetWifiPerformanceLeases">
+      <arg name="leases" type="a(sssuu)" direction="out"/>
+    </method>
+
+    <!--
         AcquireWifiPerformanceLease:
         @mode: The kind of traffic to tune Wi-Fi for:
             - "interactive": interactive traffic (e.g. game streaming, ssh)
-        @reason: Reason for requesting the lease. Used in debugging.
+        @reason: Human-readable reason for requesting the lease. 
         @options: Further options for the lease. Must be empty.
 
         EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
