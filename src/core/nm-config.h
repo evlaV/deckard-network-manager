@@ -141,6 +141,7 @@ void _nm_config_sort_groups(char **groups, gsize ngroups);
 gboolean nm_config_set_global_dns(NMConfig *self, NMGlobalDnsConfig *global_dns, GError **error);
 
 void nm_config_set_connectivity_check_enabled(NMConfig *self, gboolean enabled);
+void nm_config_set_wifi_powersave_preference(NMConfig *self, NMTernary preference);
 
 /* internal defines ... */
 extern guint _nm_config_match_nm_version;

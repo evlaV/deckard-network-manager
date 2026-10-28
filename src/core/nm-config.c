@@ -2036,6 +2036,31 @@ done:
 
 /*****************************************************************************/
 
+/* NM_TERNARY_DEFAULT clears the stored preference. */
+void
+nm_config_set_wifi_powersave_preference(NMConfig *self, NMTernary preference)
+{
+    NMConfigPrivate *priv;
+    GKeyFile        *keyfile;
+
+    g_return_if_fail(NM_IS_CONFIG(self));
+    g_return_if_fail(NM_IN_SET(preference, NM_TERNARY_DEFAULT, NM_TERNARY_FALSE, NM_TERNARY_TRUE));
+
+    priv = NM_CONFIG_GET_PRIVATE(self);
+    g_return_if_fail(priv->config_data);
+
+    keyfile = nm_config_data_clone_keyfile_intern(priv->config_data);
+    if (preference == NM_TERNARY_DEFAULT)
+        g_key_file_remove_group(keyfile, NM_CONFIG_KEYFILE_GROUP_INTERN_WIFI_POWERSAVE, NULL);
+    else
+        g_key_file_set_value(keyfile,
+                             NM_CONFIG_KEYFILE_GROUP_INTERN_WIFI_POWERSAVE,
+                             NM_CONFIG_KEYFILE_KEY_WIFI_POWERSAVE_PREFERENCE_ENABLED,
+                             preference == NM_TERNARY_TRUE ? "true" : "false");
+    nm_config_set_values(self, keyfile, TRUE, FALSE);
+    g_key_file_unref(keyfile);
+}
+
 void
 nm_config_set_connectivity_check_enabled(NMConfig *self, gboolean enabled)
 {

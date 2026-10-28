@@ -113,6 +113,8 @@ typedef struct {
 
     bool systemd_resolved : 1;
 
+    NMTernary wifi_powersave_preference;
+
     char *iwd_config_path;
 } NMConfigDataPrivate;
 
@@ -2395,6 +2397,12 @@ constructed(GObject *object)
                                           NM_CONFIG_KEYFILE_KEY_MAIN_IWD_CONFIG_PATH,
                                           NULL));
 
+    priv->wifi_powersave_preference =
+        nm_config_keyfile_get_boolean(priv->keyfile,
+                                      NM_CONFIG_KEYFILE_GROUP_INTERN_WIFI_POWERSAVE,
+                                      NM_CONFIG_KEYFILE_KEY_WIFI_POWERSAVE_PREFERENCE_ENABLED,
+                                      NM_TERNARY_DEFAULT);
+
     G_OBJECT_CLASS(nm_config_data_parent_class)->constructed(object);
 }
 
@@ -2627,4 +2635,13 @@ nm_global_dns_config_clone(NMGlobalDnsConfig *old_dns_config)
         global_dns_config_seal_domains(new_dns_config);
     }
     return new_dns_config;
+}
+
+/* The stored user preference: TRUE, FALSE, or DEFAULT when none is stored. */
+NMTernary
+nm_config_data_get_wifi_powersave_preference(const NMConfigData *self)
+{
+    g_return_val_if_fail(self, NM_TERNARY_DEFAULT);
+
+    return NM_CONFIG_DATA_GET_PRIVATE(self)->wifi_powersave_preference;
 }
