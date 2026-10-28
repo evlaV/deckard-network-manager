@@ -45,4 +45,7 @@ gboolean nm_wifi_performance_release(NMWifiPerformance *self, const char *sender
 
 void nm_wifi_performance_restore(NMWifiPerformance *self);
 
+/* Return the list of held leases. */
+GVariant *nm_wifi_performance_get_leases(NMWifiPerformance *self);
+
 #endif /* __NM_WIFI_PERFORMANCE_H__ */

@@ -527,3 +527,30 @@ nm_wifi_performance_class_init(NMWifiPerformanceClass *klass)
                                            G_TYPE_NONE,
                                            0);
 }
+
+GVariant *
+nm_wifi_performance_get_leases(NMWifiPerformance *self)
+{
+    NMDBusManager        *dbus_manager = nm_dbus_manager_get();
+    GVariantBuilder       builder;
+    WifiPerformanceLease *lease;
+
+    g_return_val_if_fail(NM_IS_WIFI_PERFORMANCE(self), NULL);
+
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(sssuu)"));
+    c_list_for_each_entry (lease, &self->leases_lst_head, lst) {
+        gulong uid = G_MAXULONG;
+        gulong pid = G_MAXULONG;
+
+        nm_dbus_manager_get_unix_user(dbus_manager, lease->dbus_owner, &uid);
+        nm_dbus_manager_get_unix_pid(dbus_manager, lease->dbus_owner, &pid);
+        g_variant_builder_add(&builder,
+                              "(sssuu)",
+                              wifi_performance_mode_to_string(lease->mode),
+                              lease->reason,
+                              lease->dbus_owner,
+                              (guint32) uid,
+                              (guint32) pid);
+    }
+    return g_variant_builder_end(&builder);
+}
