@@ -84,6 +84,26 @@
     </defaults>
   </action>
 
+  <action id="org.freedesktop.NetworkManager.wifi.performance">
+    <description>Request Wi-Fi performance modes</description>
+    <message>System policy prevents requesting Wi-Fi performance modes</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.freedesktop.NetworkManager.wifi.powersave-preference">
+    <description>Change Wi-Fi power saving preference</description>
+    <message>System policy prevents changing Wi-Fi power saving preference</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
   <action id="org.freedesktop.NetworkManager.wifi.share.protected">
     <description>Connection sharing via a protected Wi-Fi network</description>
     <message>System policy prevents sharing connections via a protected Wi-Fi network</message>

@@ -39,6 +39,7 @@
 #include "settings/nm-settings.h"
 #include "nm-wifi-utils.h"
 #include "nm-wifi-common.h"
+#include "nm-wifi-performance.h"
 #include "libnm-core-intern/nm-core-internal.h"
 #include "nm-config.h"
 
@@ -98,6 +99,8 @@ typedef struct {
     NMSupplicantManager         *sup_mgr;
     NMSupplMgrCreateIfaceHandle *sup_create_handle;
     NMSupplicantInterface       *sup_iface;
+
+    NMWifiPerformance *wifi_performance;
 
     GSource *scan_kickoff_timeout_source;
 
@@ -3248,34 +3251,48 @@ ensure_hotspot_frequency(NMDeviceWifi *self, NMSettingWireless *s_wifi, NMWifiAP
 }
 
 static void
-set_powersave(NMDevice *device)
+wifi_performance_sync(NMDeviceWifi *self)
 {
-    NMDeviceWifi              *self = NM_DEVICE_WIFI(device);
-    NMSettingWireless         *s_wireless;
-    NMSettingWirelessPowersave val;
+    NMDevice             *device = NM_DEVICE(self);
+    NMWifiPerformanceMode modes;
+    gboolean              has_interactive_lease;
 
-    s_wireless = nm_device_get_applied_setting(device, NM_TYPE_SETTING_WIRELESS);
-
-    g_return_if_fail(s_wireless);
-
-    val = nm_setting_wireless_get_powersave(s_wireless);
-    if (val == NM_SETTING_WIRELESS_POWERSAVE_DEFAULT) {
-        val = nm_config_data_get_connection_default_int64(NM_CONFIG_GET_DATA,
-                                                          "wifi.powersave",
-                                                          device,
-                                                          NM_SETTING_WIRELESS_POWERSAVE_IGNORE,
-                                                          NM_SETTING_WIRELESS_POWERSAVE_ENABLE,
-                                                          NM_SETTING_WIRELESS_POWERSAVE_IGNORE);
-    }
-
-    _LOGT(LOGD_WIFI, "powersave is set to %u", (unsigned) val);
-
-    if (val == NM_SETTING_WIRELESS_POWERSAVE_IGNORE)
+    /* Not connected: nothing to apply to. Stage2 applies it on the next connect. */
+    if (!nm_device_get_applied_connection(device))
         return;
 
-    nm_platform_wifi_set_powersave(nm_device_get_platform(device),
-                                   nm_device_get_ifindex(device),
-                                   val == NM_SETTING_WIRELESS_POWERSAVE_ENABLE);
+    modes = nm_wifi_performance_get_modes(NM_DEVICE_WIFI_GET_PRIVATE(self)->wifi_performance);
+    has_interactive_lease = NM_FLAGS_HAS(modes, NM_WIFI_PERFORMANCE_MODE_INTERACTIVE);
+
+    nm_wifi_common_set_powersave(device,
+                                 nm_wifi_common_resolve_powersave(device, has_interactive_lease));
+}
+
+static void
+wifi_performance_leases_changed(NMWifiPerformance *wifi_performance, NMDeviceWifi *self)
+{
+    wifi_performance_sync(self);
+}
+
+static void
+config_changed(NMConfig           *config,
+               NMConfigData       *config_data,
+               NMConfigChangeFlags changes,
+               NMConfigData       *old_data,
+               NMDeviceWifi       *self)
+{
+    NMTernary old_powersave_pref;
+    NMTernary new_powersave_pref;
+
+    old_powersave_pref = nm_config_data_get_wifi_powersave_preference(old_data);
+    new_powersave_pref = nm_config_data_get_wifi_powersave_preference(config_data);
+
+    /* Note: The global wifi.powersave default can only change with the user
+     * configuration files. */
+    if (old_powersave_pref != new_powersave_pref
+        || NM_FLAGS_HAS(changes, NM_CONFIG_CHANGE_VALUES_USER)) {
+        wifi_performance_sync(self);
+    }
 }
 
 static NMActStageReturn
@@ -3360,7 +3377,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         ensure_hotspot_frequency(self, s_wireless, ap);
 
     if (ap_mode == _NM_802_11_MODE_INFRA)
-        set_powersave(device);
+        wifi_performance_sync(self);
 
     /* Build up the supplicant configuration */
     config = build_supplicant_config(self, sett_conn, connection, nm_wifi_ap_get_freq(ap), &error);
@@ -3770,6 +3787,17 @@ constructed(GObject *object)
 
     /* Connect to the supplicant manager */
     priv->sup_mgr = g_object_ref(nm_supplicant_manager_get());
+
+    g_signal_connect(nm_config_get(),
+                     NM_CONFIG_SIGNAL_CONFIG_CHANGED,
+                     G_CALLBACK(config_changed),
+                     self);
+
+    priv->wifi_performance = g_object_ref(nm_wifi_performance_get());
+    g_signal_connect(priv->wifi_performance,
+                     NM_WIFI_PERFORMANCE_LEASES_CHANGED,
+                     G_CALLBACK(wifi_performance_leases_changed),
+                     self);
 }
 
 NMDevice *
@@ -3796,6 +3824,14 @@ dispose(GObject *object)
     NMDeviceWifiPrivate *priv = NM_DEVICE_WIFI_GET_PRIVATE(self);
 
     nm_assert(c_list_is_empty(&priv->scanning_prohibited_lst_head));
+
+    g_signal_handlers_disconnect_by_func(nm_config_get(), config_changed, self);
+    if (priv->wifi_performance) {
+        g_signal_handlers_disconnect_by_func(priv->wifi_performance,
+                                             wifi_performance_leases_changed,
+                                             self);
+        g_clear_object(&priv->wifi_performance);
+    }
 
     nm_clear_g_source(&priv->periodic_update_id);
     nm_clear_g_source_inst(&priv->roam_supplicant_wait_source);
