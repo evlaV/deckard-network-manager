@@ -38,9 +38,9 @@
              - uid: Unix user ID of the lease holder. G_MAXUINT32 if unavaiable. 
              - pid: Process ID of the lease holder. G_MAXUINT32 if unavailable.
 
-        (Valve)EXPERIMENTAL, not in upstream NetworkManager. May change or be removed without notice.
+        (Valve)EXPERIMENTAL: not in upstream NetworkManager. May change or be removed without notice.
 
-        Returns all held Wi-Fi performance leases.
+        Returns held Wi-Fi performance leases.
     -->
     <method name="GetWifiPerformanceLeases">
       <arg name="leases" type="a(sssuu)" direction="out"/>
