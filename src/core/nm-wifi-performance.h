@@ -33,6 +33,10 @@ NMWifiPerformance *nm_wifi_performance_get(void);
 
 NMWifiPerformanceMode nm_wifi_performance_mode_from_string(const char *str);
 
+#define NM_WIFI_PERFORMANCE_REASON_MAX_LEN_BYTES 256
+
+gboolean nm_wifi_performance_reason_is_valid(const char *reason, GError **error);
+
 NMWifiPerformanceMode nm_wifi_performance_get_modes(NMWifiPerformance *self);
 
 gboolean nm_wifi_performance_acquire(NMWifiPerformance    *self,

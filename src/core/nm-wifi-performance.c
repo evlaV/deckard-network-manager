@@ -69,6 +69,42 @@ nm_wifi_performance_mode_from_string(const char *str)
     return NM_WIFI_PERFORMANCE_MODE_NONE;
 }
 
+/* Reject control characters to ensure reason is trivially parseable.
+ * Limit string length to bound memory usage. */
+gboolean
+nm_wifi_performance_reason_is_valid(const char *reason, GError **error)
+{
+    const char *p;
+
+    g_return_val_if_fail(reason, FALSE);
+
+    if (strlen(reason) > NM_WIFI_PERFORMANCE_REASON_MAX_LEN_BYTES) {
+        g_set_error(error,
+                    NM_MANAGER_ERROR,
+                    NM_MANAGER_ERROR_INVALID_ARGUMENTS,
+                    "Reason is longer than %d bytes",
+                    NM_WIFI_PERFORMANCE_REASON_MAX_LEN_BYTES);
+        return FALSE;
+    }
+    if (!g_utf8_validate(reason, -1, NULL)) {
+        g_set_error_literal(error,
+                            NM_MANAGER_ERROR,
+                            NM_MANAGER_ERROR_INVALID_ARGUMENTS,
+                            "Reason is not valid UTF-8");
+        return FALSE;
+    }
+    for (p = reason; *p; p = g_utf8_next_char(p)) {
+        if (g_unichar_iscntrl(g_utf8_get_char(p))) {
+            g_set_error_literal(error,
+                                NM_MANAGER_ERROR,
+                                NM_MANAGER_ERROR_INVALID_ARGUMENTS,
+                                "Reason contains a control character");
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
 /*****************************************************************************/
 
 /* We save the leases here and restore them when NM restarts. They can't
@@ -479,6 +515,10 @@ nm_wifi_performance_restore(NMWifiPerformance *self)
         }
 
         reason = g_key_file_get_string(kf, groups[i], WIFI_PERFORMANCE_STATE_KEY_REASON, NULL);
+        if (reason && !nm_wifi_performance_reason_is_valid(reason, NULL)) {
+            _LOGW("ignoring saved performance lease of %s with an invalid reason", dbus_owner);
+            continue;
+        }
         _LOGI("%s performance lease of %s (\"%s\") restored",
               wifi_performance_mode_to_string(mode),
               dbus_owner,
