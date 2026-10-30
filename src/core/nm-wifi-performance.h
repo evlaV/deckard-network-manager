@@ -46,6 +46,12 @@ NMWifiPerformance *nm_wifi_performance_get(void);
 /* Returns NM_WIFI_PERFORMANCE_MODE_NONE for an unknown mode. */
 NMWifiPerformanceMode nm_wifi_performance_mode_from_string(const char *str);
 
+/* The longest lease reason accepted. */
+#define NM_WIFI_PERFORMANCE_REASON_MAX_LEN_BYTES 256
+
+/* Returns FALSE if @reason is too long or contains a control character. */
+gboolean nm_wifi_performance_reason_is_valid(const char *reason, GError **error);
+
 /* The modes of all held leases. */
 NMWifiPerformanceMode nm_wifi_performance_get_modes(NMWifiPerformance *self);
 

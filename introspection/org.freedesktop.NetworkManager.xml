@@ -53,7 +53,8 @@
         AcquireWifiPerformanceLease:
         @mode: The kind of traffic to tune Wi-Fi for:
             - "interactive": interactive traffic (e.g. game streaming, ssh)
-        @reason: Human-readable reason for requesting the lease. 
+        @reason: Human-readable reason for requesting the lease. Max 265 characters. Must be valid UTF-8 and cannot contain control 
+                 characters (e.g. \n, \t). May be empty.
         @options: Further options for the lease. Must be empty.
 
         EXPERIMENTAL. Downstream (SteamOS) addition, not in upstream NetworkManager.
@@ -66,7 +67,8 @@
         Succeeds if the caller acquired a lease in @mode or if the lease was already held via a previous call to AcquireWifiPerformanceLease.
 
         Fails with:
-           - InvalidArguments if @mode is unknown or @options is not empty.
+           - InvalidArguments if @mode is unknown, @reason is too long or contains a control character,
+             or @options is not empty.
            - PermissionDenied if the caller is not authorized.
            - AlreadyEnabledOrDisabled if the caller holds a lease in another mode.
            - Failed if the lease could not be saved (e.g. /run is full).

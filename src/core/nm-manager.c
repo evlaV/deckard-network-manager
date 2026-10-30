@@ -4991,6 +4991,7 @@ impl_manager_acquire_wifi_performance_lease(NMDBusObject                      *o
     NMManager                 *self    = NM_MANAGER(obj);
     NMManagerPrivate          *priv    = NM_MANAGER_GET_PRIVATE(self);
     gs_unref_variant GVariant *options = NULL;
+    gs_free_error GError      *error   = NULL;
     NMAuthChain               *chain;
     NMWifiPerformanceMode      mode;
     const char                *mode_str;
@@ -5005,6 +5006,11 @@ impl_manager_acquire_wifi_performance_lease(NMDBusObject                      *o
                                               NM_MANAGER_ERROR_INVALID_ARGUMENTS,
                                               "Unknown Wi-Fi performance mode \"%s\"",
                                               mode_str);
+        return;
+    }
+
+    if (!nm_wifi_performance_reason_is_valid(reason, &error)) {
+        g_dbus_method_invocation_return_gerror(invocation, error);
         return;
     }
 
