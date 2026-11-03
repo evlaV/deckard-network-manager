@@ -366,6 +366,7 @@
         <arg choice='plain'><command>permissions</command></arg>
         <arg choice='plain'><command>logging</command></arg>
         <arg choice='plain'><command>reload</command></arg>
+        <arg choice='plain'><command>wifi-leases</command></arg>
       </group>
       <arg rep='repeat'><replaceable>ARGUMENTS</replaceable></arg>
     </cmdsynopsis>
@@ -487,6 +488,13 @@
             </citerefentry>
             for more details about signals.
           </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><command>wifi-leases</command></term>
+        <listitem>
+          <para>Show the held Wi-Fi performance leases.</para>
         </listitem>
       </varlistentry>
     </variablelist>

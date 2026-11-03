@@ -750,6 +750,19 @@ nm_dbus_manager_get_unix_user(NMDBusManager *self, const char *sender, gulong *o
     return TRUE;
 }
 
+gboolean
+nm_dbus_manager_get_unix_pid(NMDBusManager *self, const char *sender, gulong *out_pid)
+{
+    const CallerInfo *caller_info;
+
+    g_return_val_if_fail(sender != NULL, FALSE);
+    g_return_val_if_fail(out_pid != NULL, FALSE);
+
+    caller_info = _get_caller_info_ensure(self, sender, FALSE, TRUE);
+    *out_pid    = caller_info->pid;
+    return caller_info->pid_valid;
+}
+
 /*****************************************************************************/
 
 static const NMDBusInterfaceInfoExtended *

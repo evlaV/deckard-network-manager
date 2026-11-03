@@ -301,18 +301,69 @@ static const NmcMetaGenericInfo
         _METAGEN_GENERAL_LOGGING(NMC_GENERIC_INFO_TYPE_GENERAL_LOGGING_DOMAINS, "DOMAINS"),
 };
 
+static gconstpointer
+_metagen_general_wifi_leases_get_fcn(NMC_META_GENERIC_INFO_GET_FCN_ARGS)
+{
+    GVariant   *lease = target;
+    const char *mode;
+    const char *reason;
+    const char *bus_name;
+    guint32     uid;
+    guint32     pid;
+
+    NMC_HANDLE_COLOR(NM_META_COLOR_NONE);
+
+    g_variant_get(lease, "(&s&s&suu)", &mode, &reason, &bus_name, &uid, &pid);
+
+    switch (info->info_type) {
+    case NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_MODE:
+        return mode;
+    case NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_REASON:
+        return reason;
+    case NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_BUS_NAME:
+        return bus_name;
+    case NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_UID:
+        if (uid == G_MAXUINT32)
+            return NULL;
+        return (*out_to_free = g_strdup_printf("%u", uid));
+    case NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_PID:
+        if (pid == G_MAXUINT32)
+            return NULL;
+        return (*out_to_free = g_strdup_printf("%u", pid));
+    default:
+        break;
+    }
+
+    g_return_val_if_reached(NULL);
+}
+
+static const NmcMetaGenericInfo *const
+    metagen_general_wifi_leases[_NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_NUM + 1] = {
+#define _METAGEN_GENERAL_WIFI_LEASES(type, name) \
+    [type] =                                     \
+        NMC_META_GENERIC(name, .info_type = type, .get_fcn = _metagen_general_wifi_leases_get_fcn)
+        _METAGEN_GENERAL_WIFI_LEASES(NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_MODE, "MODE"),
+        _METAGEN_GENERAL_WIFI_LEASES(NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_REASON, "REASON"),
+        _METAGEN_GENERAL_WIFI_LEASES(NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_BUS_NAME,
+                                     "BUS-NAME"),
+        _METAGEN_GENERAL_WIFI_LEASES(NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_UID, "UID"),
+        _METAGEN_GENERAL_WIFI_LEASES(NMC_GENERIC_INFO_TYPE_GENERAL_WIFI_LEASES_PID, "PID"),
+};
+
 /*****************************************************************************/
 
 static void
 usage_general(void)
 {
     nmc_printerr(_("Usage: nmcli general { COMMAND | help }\n\n"
-                   "COMMAND := { status | hostname | permissions | logging | reload }\n\n"
+                   "COMMAND := { status | hostname | permissions | logging | reload | wifi-leases "
+                   "}\n\n"
                    "  status\n\n"
                    "  hostname [<hostname>]\n\n"
                    "  permissions\n\n"
                    "  logging [level <log level>] [domains <log domains>]\n\n"
-                   "  reload [<flags>]\n\n"));
+                   "  reload [<flags>]\n\n"
+                   "  wifi-leases\n\n"));
 }
 
 static void
@@ -391,6 +442,14 @@ usage_general_logging(void)
           "Without any argument current logging level and domains are shown. In order to\n"
           "change logging state, provide level and/or domain. Please refer to the man page\n"
           "for the list of possible logging domains.\n\n"));
+}
+
+static void
+usage_general_wifi_leases(void)
+{
+    nmc_printerr(_("Usage: nmcli general wifi-leases { help }\n"
+                   "\n"
+                   "Show held Wi-Fi performance leases.\n"));
 }
 
 static void
@@ -704,6 +763,81 @@ do_general_reload(const NMCCommand *cmd, NmCli *nmc, int argc, const char *const
 }
 
 static void
+wifi_leases_cb(GObject *source, GAsyncResult *result, gpointer user_data)
+{
+    NmCli                     *nmc        = user_data;
+    gs_unref_variant GVariant *ret        = NULL;
+    gs_unref_variant GVariant *leases     = NULL;
+    gs_free_error GError      *error      = NULL;
+    gs_free gpointer          *rows       = NULL;
+    const char                *fields_str = NULL;
+    gsize                      i, n;
+
+    ret = nm_client_dbus_call_finish(NM_CLIENT(source), result, &error);
+    if (!ret) {
+        g_dbus_error_strip_remote_error(error);
+        g_string_printf(nmc->return_text,
+                        _("Error: failed to get Wi-Fi performance leases: %s"),
+                        nmc_error_get_simple_message(error));
+        nmc->return_value = NMC_RESULT_ERROR_UNKNOWN;
+        quit();
+        return;
+    }
+
+    leases = g_variant_get_child_value(ret, 0);
+    n      = g_variant_n_children(leases);
+    rows   = g_new(gpointer, n + 1);
+    for (i = 0; i < n; i++)
+        rows[i] = g_variant_get_child_value(leases, i);
+    rows[n] = NULL;
+
+    if (nmc->required_fields && g_ascii_strcasecmp(nmc->required_fields, "common") != 0
+        && g_ascii_strcasecmp(nmc->required_fields, "all") != 0)
+        fields_str = nmc->required_fields;
+
+    if (!nmc_print_table(&nmc->nmc_config,
+                         rows,
+                         NULL,
+                         _("Wi-Fi performance leases"),
+                         (const NMMetaAbstractInfo *const *) metagen_general_wifi_leases,
+                         fields_str,
+                         &error)) {
+        g_string_printf(nmc->return_text, _("Error: 'general wifi-leases': %s"), error->message);
+        nmc->return_value = NMC_RESULT_ERROR_USER_INPUT;
+    }
+
+    for (i = 0; i < n; i++)
+        g_variant_unref(rows[i]);
+    quit();
+}
+
+static void
+do_general_wifi_leases(const NMCCommand *cmd, NmCli *nmc, int argc, const char *const *argv)
+{
+    next_arg(nmc, &argc, &argv, NULL);
+    if (nmc->complete)
+        return;
+
+    if (argc > 0) {
+        g_string_printf(nmc->return_text, _("Error: extra argument '%s'"), *argv);
+        nmc->return_value = NMC_RESULT_ERROR_USER_INPUT;
+        return;
+    }
+
+    nmc->should_wait++;
+    nm_client_dbus_call(nmc->client,
+                        NM_DBUS_PATH,
+                        NM_DBUS_INTERFACE,
+                        "GetWifiPerformanceLeases",
+                        NULL,
+                        G_VARIANT_TYPE("(a(sssuu))"),
+                        -1,
+                        NULL,
+                        wifi_leases_cb,
+                        nmc);
+}
+
+static void
 do_general_permissions(const NMCCommand *cmd, NmCli *nmc, int argc, const char *const *argv)
 {
     next_arg(nmc, &argc, &argv, NULL);
@@ -948,6 +1082,7 @@ nmc_command_func_general(const NMCCommand *cmd, NmCli *nmc, int argc, const char
         {"permissions", do_general_permissions, usage_general_permissions, TRUE, TRUE},
         {"logging", do_general_logging, usage_general_logging, TRUE, TRUE},
         {"reload", do_general_reload, usage_general_reload, FALSE, FALSE},
+        {"wifi-leases", do_general_wifi_leases, usage_general_wifi_leases, TRUE, TRUE},
         {NULL, do_general_status, usage_general, TRUE, TRUE},
     };
 
