@@ -5051,6 +5051,20 @@ impl_manager_release_wifi_performance_lease(NMDBusObject                      *o
     g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
+static void
+impl_manager_get_wifi_performance_leases(NMDBusObject                      *obj,
+                                         const NMDBusInterfaceInfoExtended *interface_info,
+                                         const NMDBusMethodInfoExtended    *method_info,
+                                         GDBusConnection                   *connection,
+                                         const char                        *sender,
+                                         GDBusMethodInvocation             *invocation,
+                                         GVariant                          *parameters)
+{
+    g_dbus_method_invocation_return_value(
+        invocation,
+        g_variant_new("(@a(sssuu))", nm_wifi_performance_get_leases(nm_wifi_performance_get())));
+}
+
 static gboolean
 is_compatible_with_port(NMConnection *controller, NMConnection *port)
 {
@@ -9701,7 +9715,13 @@ static const NMDBusInterfaceInfoExtended interface_info_manager = {
                 .handle = impl_manager_acquire_wifi_performance_lease, ),
             NM_DEFINE_DBUS_METHOD_INFO_EXTENDED(
                 NM_DEFINE_GDBUS_METHOD_INFO_INIT("ReleaseWifiPerformanceLease", ),
-                .handle = impl_manager_release_wifi_performance_lease, ), ),
+                .handle = impl_manager_release_wifi_performance_lease, ),
+            NM_DEFINE_DBUS_METHOD_INFO_EXTENDED(
+                NM_DEFINE_GDBUS_METHOD_INFO_INIT(
+                    "GetWifiPerformanceLeases",
+                    .out_args = NM_DEFINE_GDBUS_ARG_INFOS(
+                        NM_DEFINE_GDBUS_ARG_INFO("leases", "a(sssuu)"), ), ),
+                .handle = impl_manager_get_wifi_performance_leases, ), ),
         .signals    = NM_DEFINE_GDBUS_SIGNAL_INFOS(&signal_info_check_permissions,
                                                 &signal_info_state_changed,
                                                 &signal_info_device_added,
