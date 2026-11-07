@@ -5033,9 +5033,43 @@ impl_manager_acquire_wifi_performance_lease(NMDBusObject                      *o
     }
 
     c_list_link_tail(&priv->auth_lst_head, nm_auth_chain_parent_lst_list(chain));
+    nm_auth_chain_set_data(chain, "wifi-performance-acquire", GINT_TO_POINTER(TRUE), NULL);
     nm_auth_chain_set_data(chain, "mode", GUINT_TO_POINTER(mode), NULL);
     nm_auth_chain_set_data(chain, "reason", g_strdup(reason), g_free);
     nm_auth_chain_add_call(chain, NM_AUTH_PERMISSION_WIFI_PERFORMANCE, TRUE);
+}
+
+/* An Acquire from @sender that is still waiting for authorization would add
+ * its lease after a Release that arrived later, because Release does not wait
+ * for authorization. Cancel the pending acquire and allow the latest call to 
+ * determine whether the client holds the lease. */
+static void
+_wifi_performance_cancel_pending_acquires(NMManager *self, const char *sender)
+{
+    NMManagerPrivate *priv = NM_MANAGER_GET_PRIVATE(self);
+    CList            *iter;
+    CList            *iter_safe;
+
+    c_list_for_each_safe (iter, iter_safe, &priv->auth_lst_head) {
+        NMAuthChain           *chain = nm_auth_chain_parent_lst_entry(iter);
+        GDBusMethodInvocation *context;
+
+        if (!nm_auth_chain_get_data(chain, "wifi-performance-acquire"))
+            continue;
+
+        context = nm_auth_chain_get_context(chain);
+        if (!nm_streq0(g_dbus_method_invocation_get_sender(context), sender))
+            continue;
+
+        _LOGI(LOGD_WIFI,
+              "wifi-perf: release by %s: cancel acquire that is waiting for authorization",
+              sender);
+        g_dbus_method_invocation_return_error_literal(g_object_ref(context),
+                                                      NM_MANAGER_ERROR,
+                                                      NM_MANAGER_ERROR_FAILED,
+                                                      "Cancelled by ReleaseWifiPerformanceLease");
+        nm_auth_chain_destroy(chain);
+    }
 }
 
 static void
@@ -5048,6 +5082,8 @@ impl_manager_release_wifi_performance_lease(NMDBusObject                      *o
                                             GVariant                          *parameters)
 {
     gs_free_error GError *error = NULL;
+
+    _wifi_performance_cancel_pending_acquires(NM_MANAGER(obj), sender);
 
     if (!nm_wifi_performance_release(nm_wifi_performance_get(), sender, &error)) {
         g_dbus_method_invocation_take_error(invocation, g_steal_pointer(&error));
